@@ -12,6 +12,7 @@ PLAYER_SPEED = 5
 PLAYER_MAX_HP = 100
 BULLET_SPEED = 12
 
+# --- Настройки уровня ---
 ROOM_WIDTH_PX = 1024
 ROOM_HEIGHT_PX = 768
 
@@ -32,3 +33,30 @@ UI_BG_COLOR = arcade.color.DARK_GRAY
 
 # --- Пути ---
 ASSET_PATH = "assets/"
+
+# --- СПИСОК СКИНОВ (НОВОЕ) ---
+# name: Имя для БД и отображения
+# price: Цена в кристаллах (0 = бесплатно)
+# image: Путь к спрайту
+SKINS_CONFIG = [
+    {
+        "name": "Adventurer",
+        "price": 0,
+        "image": ":resources:images/animated_characters/female_adventurer/femaleAdventurer_idle.png"
+    },
+    {
+        "name": "Knight",
+        "price": 50,
+        "image": ":resources:images/animated_characters/male_person/malePerson_idle.png"
+    },
+    {
+        "name": "Robot",
+        "price": 100,
+        "image": ":resources:images/animated_characters/robot/robot_idle.png"
+    },
+    {
+        "name": "Zombie",
+        "price": 200,
+        "image": ":resources:images/animated_characters/zombie/zombie_idle.png"
+    }
+]

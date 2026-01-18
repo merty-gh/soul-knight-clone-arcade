@@ -1,12 +1,17 @@
 import arcade
 import config
+import database
 from entities.player import Player
 from world.level_generator import LevelGenerator
+from world.lobby import Lobby
 from ui.hud import HUD
 from ui.menus import MenuRenderer
+from ui.skin_menu import SkinMenu
 from engine.game_state import GameState
 from utils.particle_system import ParticleSystem
 
+
+# КЛАСС ExtendedGameState УДАЛЕН. Используем GameState напрямую.
 
 class GameWindow(arcade.Window):
     def __init__(self):
@@ -18,42 +23,63 @@ class GameWindow(arcade.Window):
         self.hud = None
         self.player_list = None
         self.player = None
+
         self.level_generator = None
+        self.lobby = None
+        self.skin_menu = None
+
         self.physics_engine = None
         self.bullet_list = None
         self.particle_system = None
         self.camera = None
 
-        self.current_room_coords = None
+        self.interact_text = arcade.Text("", config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 2 + 50,
+                                         arcade.color.WHITE, 14, anchor_x="center")
+        self.setup_system()
 
-        self.setup_game()
-
-    def setup_game(self):
+    def setup_system(self):
         self.player_list = arcade.SpriteList()
-        self.bullet_list = arcade.SpriteList()
         self.camera = arcade.Camera2D()
-
         self.player = Player(config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 2)
         self.player_list.append(self.player)
+        self.particle_system = ParticleSystem()
+        self.hud = HUD()
 
+    def enter_lobby(self):
+        self.current_state = GameState.LOBBY
+        self.lobby = Lobby()
+        self.lobby.setup()
+        self.player.center_x = config.SCREEN_WIDTH // 2
+        self.player.center_y = 250
+
+        obstacles = arcade.SpriteList()
+        obstacles.extend(self.lobby.wall_list)
+
+        self.physics_engine = arcade.PhysicsEngineSimple(self.player, obstacles)
+        self.camera.position = (config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 2)
+        self.bullet_list = arcade.SpriteList()
+
+    def open_skin_menu(self):
+        """Открывает меню гардероба"""
+        # ИСПОЛЬЗУЕМ GameState.SKIN_SELECT
+        self.current_state = GameState.SKIN_SELECT
+        self.skin_menu = SkinMenu(self.player)
+
+    def start_dungeon_run(self):
+        self.current_state = GameState.PLAYING
         self.level_generator = LevelGenerator()
         self.level_generator.generate_level(self.player)
-
-        self.particle_system = ParticleSystem()
 
         obstacles = arcade.SpriteList()
         obstacles.extend(self.level_generator.wall_list)
         obstacles.extend(self.level_generator.door_list)
 
         self.physics_engine = arcade.PhysicsEngineSimple(self.player, obstacles)
-        self.hud = HUD()
         self.camera.position = (self.player.center_x, self.player.center_y)
 
-        # Прячем все двери при старте
         for door in self.level_generator.door_list:
             door.center_x = -10000
             door.center_y = -10000
-
         self.current_room_coords = None
 
     def on_draw(self):
@@ -61,13 +87,22 @@ class GameWindow(arcade.Window):
         if self.camera:
             self.camera.use()
 
-        if self.current_state in [GameState.PLAYING, GameState.PAUSED, GameState.GAME_OVER]:
+        if self.current_state == GameState.LOBBY:
+            self.lobby.floor_list.draw()
+            self.lobby.wall_list.draw()
+            self.lobby.decor_list.draw()
+            self.lobby.interactable_list.draw()
+            self.player_list.draw()
+            self.interact_text.draw()
+        elif self.current_state in [GameState.PLAYING, GameState.PAUSED, GameState.GAME_OVER]:
             self.draw_game()
 
         self.default_camera.use()
 
         if self.current_state == GameState.PLAYING:
             self.hud.draw(self.player)
+        elif self.current_state == GameState.LOBBY:
+            arcade.draw_text(f"Crystals: {self.player.crystals}", 20, config.SCREEN_HEIGHT - 40, arcade.color.CYAN, 20)
         elif self.current_state == GameState.MENU:
             self.menu_renderer.draw_main_menu()
         elif self.current_state == GameState.PAUSED:
@@ -75,6 +110,10 @@ class GameWindow(arcade.Window):
             self.menu_renderer.draw_pause_menu()
         elif self.current_state == GameState.GAME_OVER:
             self.menu_renderer.draw_game_over(self.player.score)
+
+        # ОТРИСОВКА МЕНЮ СКИНОВ
+        elif self.current_state == GameState.SKIN_SELECT:
+            self.skin_menu.draw()
 
     def draw_game(self):
         self.level_generator.floor_list.draw()
@@ -87,8 +126,22 @@ class GameWindow(arcade.Window):
         self.particle_system.draw()
 
     def on_update(self, delta_time):
-        if self.current_state == GameState.PLAYING:
+        if self.current_state == GameState.LOBBY:
+            self.update_lobby(delta_time)
+        elif self.current_state == GameState.PLAYING:
             self.update_game(delta_time)
+
+    def update_lobby(self, delta_time):
+        self.physics_engine.update()
+        self.player_list.update(delta_time)
+
+        self.interact_text.value = ""
+        closest_item = arcade.check_for_collision_with_list(self.player, self.lobby.interactable_list)
+        if closest_item:
+            item = closest_item[0]
+            self.interact_text.value = item.text
+            self.interact_text.x = self.player.center_x
+            self.interact_text.y = self.player.center_y + 50
 
     def update_game(self, delta_time):
         self.physics_engine.update()
@@ -105,12 +158,9 @@ class GameWindow(arcade.Window):
         self.particle_system.update()
         self.level_generator.item_list.update(delta_time)
         self.level_generator.door_list.update(delta_time)
-
         self.scroll_to_player()
+        self.update_room_logic()
 
-        self.update_room_logic()  # <-- Исправленный метод здесь
-
-        # Пули
         walls_and_doors = [self.level_generator.wall_list, self.level_generator.door_list]
         for bullet in self.bullet_list:
             hit_obstacles = arcade.check_for_collision_with_lists(bullet, walls_and_doors)
@@ -118,7 +168,6 @@ class GameWindow(arcade.Window):
                 self.particle_system.add_hit_effect(bullet.center_x, bullet.center_y, arcade.color.GRAY)
                 bullet.kill()
                 continue
-
             hit_enemies = arcade.check_for_collision_with_list(bullet, self.level_generator.enemy_list)
             if len(hit_enemies) > 0:
                 bullet.kill()
@@ -126,6 +175,8 @@ class GameWindow(arcade.Window):
                     self.particle_system.add_hit_effect(enemy.center_x, enemy.center_y, arcade.color.RED)
                     enemy.take_damage(bullet.damage)
                     if enemy.hp <= 0:
+                        database.add_crystals(5)
+                        self.player.update_crystals_from_db()
                         self.player.score += 10
                         self.particle_system.add_hit_effect(enemy.center_x, enemy.center_y, arcade.color.DARK_RED)
 
@@ -144,42 +195,30 @@ class GameWindow(arcade.Window):
     def update_room_logic(self):
         px = self.player.center_x
         py = self.player.center_y
-
-        # 1. Потенциальная комната (где сейчас центр игрока)
         gx = int(px // config.ROOM_WIDTH_PX)
         gy = int(py // config.ROOM_HEIGHT_PX)
         potential_room = (gx, gy)
-
-        # 2. Проверяем, зашел ли игрок достаточно глубоко (Буферная зона)
         buffer = 100
-
-        # Локальные координаты внутри комнаты
         local_x = px % config.ROOM_WIDTH_PX
         local_y = py % config.ROOM_HEIGHT_PX
-
         in_safe_zone_x = (buffer < local_x < config.ROOM_WIDTH_PX - buffer)
         in_safe_zone_y = (buffer < local_y < config.ROOM_HEIGHT_PX - buffer)
 
-        # 3. Обновляем комнату ТОЛЬКО если игрок в безопасной зоне
         if in_safe_zone_x and in_safe_zone_y:
             if potential_room != self.current_room_coords:
                 self.current_room_coords = potential_room
                 self.on_enter_room(potential_room)
-
-        # 4. Проверка зачистки текущей комнаты (если мы в какой-то комнате)
         if self.current_room_coords:
             self.check_room_cleared(self.current_room_coords)
 
     def on_enter_room(self, room_coords):
         room_data = self.level_generator.rooms_data.get(room_coords)
         if not room_data: return
-
         enemies = room_data['enemies']
         alive_count = 0
         for e in enemies:
             if e in self.level_generator.enemy_list:
                 alive_count += 1
-
         if alive_count > 0:
             for door in room_data['doors']:
                 door.center_x = door.initial_x
@@ -188,13 +227,11 @@ class GameWindow(arcade.Window):
     def check_room_cleared(self, room_coords):
         room_data = self.level_generator.rooms_data.get(room_coords)
         if not room_data: return
-
         enemies = room_data['enemies']
         alive_count = 0
         for e in enemies:
             if e in self.level_generator.enemy_list:
                 alive_count += 1
-
         if alive_count == 0:
             for door in room_data['doors']:
                 door.center_x = -10000
@@ -217,11 +254,41 @@ class GameWindow(arcade.Window):
                     self.bullet_list.append(bullet)
 
     def on_key_press(self, key, modifiers):
-        if key == arcade.key.ESCAPE: arcade.close_window()
+        if key == arcade.key.ESCAPE:
+            if self.current_state == GameState.SKIN_SELECT:
+                self.enter_lobby()
+            else:
+                arcade.close_window()
+
         if self.current_state == GameState.MENU:
             if key == arcade.key.ENTER:
-                self.setup_game()
-                self.current_state = GameState.PLAYING
+                self.enter_lobby()
+
+        elif self.current_state == GameState.LOBBY:
+            if key == arcade.key.W or key == arcade.key.UP:
+                self.player.change_y = config.PLAYER_SPEED
+            elif key == arcade.key.S or key == arcade.key.DOWN:
+                self.player.change_y = -config.PLAYER_SPEED
+            elif key == arcade.key.A or key == arcade.key.LEFT:
+                self.player.change_x = -config.PLAYER_SPEED
+            elif key == arcade.key.D or key == arcade.key.RIGHT:
+                self.player.change_x = config.PLAYER_SPEED
+
+            if key == arcade.key.E:
+                hit_list = arcade.check_for_collision_with_list(self.player, self.lobby.interactable_list)
+                if hit_list:
+                    item = hit_list[0]
+                    if "Skin" in str(type(item)):
+                        self.open_skin_menu()
+                    else:
+                        item.on_interact(self.player, self)
+
+        # УПРАВЛЕНИЕ В ГАРДЕРОБЕ
+        elif self.current_state == GameState.SKIN_SELECT:
+            result = self.skin_menu.on_key_press(key)
+            if result == "EXIT":
+                self.enter_lobby()
+
         elif self.current_state == GameState.PLAYING:
             if key == arcade.key.P: self.current_state = GameState.PAUSED
             if key == arcade.key.W or key == arcade.key.UP:
@@ -232,15 +299,16 @@ class GameWindow(arcade.Window):
                 self.player.change_x = -config.PLAYER_SPEED
             elif key == arcade.key.D or key == arcade.key.RIGHT:
                 self.player.change_x = config.PLAYER_SPEED
+
         elif self.current_state == GameState.PAUSED:
             if key == arcade.key.P: self.current_state = GameState.PLAYING
         elif self.current_state == GameState.GAME_OVER:
             if key == arcade.key.R:
-                self.setup_game()
-                self.current_state = GameState.PLAYING
+                self.player.hp = self.player.max_hp
+                self.enter_lobby()
 
     def on_key_release(self, key, modifiers):
-        if self.current_state == GameState.PLAYING:
+        if self.current_state in [GameState.PLAYING, GameState.LOBBY]:
             if key == arcade.key.W or key == arcade.key.UP:
                 if self.player.change_y > 0: self.player.change_y = 0
             elif key == arcade.key.S or key == arcade.key.DOWN:
