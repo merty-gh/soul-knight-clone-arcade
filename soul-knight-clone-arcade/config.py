@@ -8,7 +8,7 @@ SCREEN_TITLE = "Soul Knight Clone (Arcade)"
 # --- Настройки игры ---
 SPRITE_SCALING = 0.5
 TILE_SCALING = 0.5
-PLAYER_SPEED = 5
+PLAYER_SPEED = 3.5
 PLAYER_MAX_HP = 100
 BULLET_SPEED = 12
 

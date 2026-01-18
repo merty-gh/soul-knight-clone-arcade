@@ -1,8 +1,11 @@
+import random
 import arcade
 import config
 import database
 from entities.player import Player
 from entities.items import CrystalDrop
+# Импортируем врага для спавна волн
+from enemies.base_enemy import BaseEnemy
 from world.level_generator import LevelGenerator
 from world.lobby import Lobby
 from ui.hud import HUD
@@ -18,25 +21,30 @@ class GameWindow(arcade.Window):
         super().__init__(config.SCREEN_WIDTH, config.SCREEN_HEIGHT, config.SCREEN_TITLE)
         arcade.set_background_color(config.BG_COLOR)
 
+        # --- Состояния ---
         self.current_state = GameState.MENU
         self.menu_renderer = MenuRenderer()
 
+        # --- Объекты ---
         self.hud = None
         self.player_list = None
         self.player = None
 
+        # --- Миры ---
         self.level_generator = None
         self.lobby = None
 
+        # --- Меню ---
         self.skin_menu = None
         self.weapon_menu = None
 
+        # --- Системы ---
         self.physics_engine = None
         self.bullet_list = None
         self.particle_system = None
         self.camera = None
 
-        # --- ИСПРАВЛЕНИЕ: используем x и y вместо start_x и start_y ---
+        # --- Тексты (Оптимизация для Arcade 3.0: используем x и y) ---
         self.interact_text = arcade.Text(
             text="",
             x=config.SCREEN_WIDTH // 2,
@@ -53,10 +61,8 @@ class GameWindow(arcade.Window):
             color=arcade.color.CYAN,
             font_size=20
         )
-        # -------------------------------------------------------------
 
         self.current_room_coords = None
-
         self.setup_system()
 
     def setup_system(self):
@@ -68,6 +74,10 @@ class GameWindow(arcade.Window):
 
         self.particle_system = ParticleSystem()
         self.hud = HUD()
+
+    # =========================================
+    # ПЕРЕХОДЫ И НАСТРОЙКА
+    # =========================================
 
     def enter_lobby(self):
         self.current_state = GameState.LOBBY
@@ -104,10 +114,15 @@ class GameWindow(arcade.Window):
         self.physics_engine = arcade.PhysicsEngineSimple(self.player, obstacles)
         self.camera.position = (self.player.center_x, self.player.center_y)
 
+        # Прячем двери при старте
         for door in self.level_generator.door_list:
             door.center_x = -10000
             door.center_y = -10000
         self.current_room_coords = None
+
+    # =========================================
+    # ОТРИСОВКА
+    # =========================================
 
     def on_draw(self):
         self.clear()
@@ -161,6 +176,10 @@ class GameWindow(arcade.Window):
         self.player_list.draw()
         self.particle_system.draw()
 
+    # =========================================
+    # ОБНОВЛЕНИЕ
+    # =========================================
+
     def on_update(self, delta_time):
         if self.current_state == GameState.LOBBY:
             self.update_lobby(delta_time)
@@ -200,12 +219,14 @@ class GameWindow(arcade.Window):
 
         walls_and_doors = [self.level_generator.wall_list, self.level_generator.door_list]
         for bullet in self.bullet_list:
+            # 1. Стены
             hit_obstacles = arcade.check_for_collision_with_lists(bullet, walls_and_doors)
             if len(hit_obstacles) > 0:
                 self.particle_system.add_hit_effect(bullet.center_x, bullet.center_y, arcade.color.GRAY)
                 bullet.kill()
                 continue
 
+            # 2. Враги
             hit_enemies = arcade.check_for_collision_with_list(bullet, self.level_generator.enemy_list)
             if len(hit_enemies) > 0:
                 bullet.kill()
@@ -214,11 +235,13 @@ class GameWindow(arcade.Window):
                     enemy.take_damage(bullet.damage)
 
                     if enemy.hp <= 0:
+                        # Спавн кристалла
                         crystal = CrystalDrop(enemy.center_x, enemy.center_y, amount=5)
                         self.level_generator.item_list.append(crystal)
                         self.player.score += 10
                         self.particle_system.add_hit_effect(enemy.center_x, enemy.center_y, arcade.color.DARK_RED)
 
+        # Урон игроку
         for enemy in self.level_generator.enemy_list:
             if arcade.check_for_collision(self.player, enemy):
                 self.player.hp -= 0.5
@@ -226,6 +249,7 @@ class GameWindow(arcade.Window):
                     self.player.hp = 0
                     self.current_state = GameState.GAME_OVER
 
+        # Подбор предметов
         hit_items = arcade.check_for_collision_with_list(self.player, self.level_generator.item_list)
         for item in hit_items:
             if isinstance(item, CrystalDrop):
@@ -234,6 +258,10 @@ class GameWindow(arcade.Window):
                 item.kill()
             elif item.on_pickup(self.player):
                 item.kill()
+
+    # =========================================
+    # ЛОГИКА КОМНАТ И ВОЛН (НОВОЕ)
+    # =========================================
 
     def update_room_logic(self):
         px = self.player.center_x
@@ -257,32 +285,75 @@ class GameWindow(arcade.Window):
             self.check_room_cleared(self.current_room_coords)
 
     def on_enter_room(self, room_coords):
+        """Вход в комнату: Старт волн"""
         room_data = self.level_generator.rooms_data.get(room_coords)
         if not room_data: return
-        enemies = room_data['enemies']
-        alive_count = 0
-        for e in enemies:
-            if e in self.level_generator.enemy_list:
-                alive_count += 1
 
-        if alive_count > 0:
+        # Если уже зачищено, убираем двери на всякий случай
+        if room_data['cleared']:
+            for door in room_data['doors']:
+                door.center_x = -10000
+            return
+
+        # Если врагов еще нет и волна 0, начинаем бой
+        if room_data['current_wave'] == 0:
+            # Запираем двери
             for door in room_data['doors']:
                 door.center_x = door.initial_x
                 door.center_y = door.initial_y
 
-    def check_room_cleared(self, room_coords):
-        room_data = self.level_generator.rooms_data.get(room_coords)
-        if not room_data: return
-        enemies = room_data['enemies']
-        alive_count = 0
-        for e in enemies:
-            if e in self.level_generator.enemy_list:
-                alive_count += 1
+            # Старт первой волны
+            self.start_next_wave(room_coords)
 
-        if alive_count == 0:
-            for door in room_data['doors']:
-                door.center_x = -10000
-                door.center_y = -10000
+    def start_next_wave(self, room_coords):
+        """Спавн врагов для текущей волны"""
+        room_data = self.level_generator.rooms_data.get(room_coords)
+        room_data['current_wave'] += 1
+        wave_num = room_data['current_wave']
+
+        print(f"Room {room_coords}: Wave {wave_num} started!")
+
+        # Формула количества врагов
+        count = 1 + wave_num
+
+        gx, gy = room_coords
+        min_x = gx * config.ROOM_WIDTH_PX + 100
+        max_x = (gx + 1) * config.ROOM_WIDTH_PX - 100
+        min_y = gy * config.ROOM_HEIGHT_PX + 100
+        max_y = (gy + 1) * config.ROOM_HEIGHT_PX - 100
+
+        for _ in range(count):
+            ex = random.randint(min_x, max_x)
+            ey = random.randint(min_y, max_y)
+            # Создаем врага, передаем игрока для преследования
+            enemy = BaseEnemy(":resources:images/animated_characters/zombie/zombie_idle.png", ex, ey, self.player)
+            # Добавляем в общий список (для отрисовки и физики)
+            self.level_generator.enemy_list.append(enemy)
+            # Добавляем в список комнаты (для отслеживания смерти)
+            room_data['spawned_enemies'].append(enemy)
+
+    def check_room_cleared(self, room_coords):
+        """Проверка: убиты ли враги?"""
+        room_data = self.level_generator.rooms_data.get(room_coords)
+        if not room_data or room_data['cleared']: return
+
+        # Считаем живых только из списка этой комнаты
+        active_enemies = [e for e in room_data['spawned_enemies'] if e.hp > 0]
+
+        if len(active_enemies) == 0:
+            room_data['spawned_enemies'] = []  # Очищаем список ссылок
+
+            # Есть ли еще волны?
+            if room_data['current_wave'] < room_data['max_waves']:
+                self.start_next_wave(room_coords)
+            else:
+                # Победа в комнате
+                room_data['cleared'] = True
+                print(f"Room {room_coords} CLEARED!")
+                # Открываем двери
+                for door in room_data['doors']:
+                    door.center_x = -10000
+                    door.center_y = -10000
 
     def scroll_to_player(self):
         cur_x, cur_y = self.camera.position
@@ -291,6 +362,10 @@ class GameWindow(arcade.Window):
         new_x = cur_x + (dest_x - cur_x) * speed
         new_y = cur_y + (dest_y - cur_y) * speed
         self.camera.position = (new_x, new_y)
+
+    # =========================================
+    # УПРАВЛЕНИЕ
+    # =========================================
 
     def on_mouse_press(self, x, y, button, modifiers):
         if self.current_state == GameState.PLAYING:

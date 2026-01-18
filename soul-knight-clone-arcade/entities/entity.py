@@ -1,10 +1,18 @@
 import arcade
 
+import arcade
+
+
 class Entity(arcade.Sprite):
     def __init__(self, filename, scale, x, y):
-        super().__init__(filename, scale)
+        super().__init__(filename, scale=scale)
+
         self.center_x = x
         self.center_y = y
+
+        self.change_x = 0.0
+        self.change_y = 0.0
+
         self.hp = 0
         self.max_hp = 0
 class Item(Entity):
