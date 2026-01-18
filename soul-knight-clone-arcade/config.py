@@ -73,3 +73,31 @@ WEAPONS_CONFIG = [
         "image": ":resources:images/space_shooter/laserRed01.png"
     }
 ]
+# --- Настройки врагов ---
+ENEMY_SCALING = 0.5
+
+# 1. ЗОМБИ (Средний)
+ZOMBIE_HP = 30
+ZOMBIE_SPEED = 2.0
+ZOMBIE_DAMAGE = 10
+ZOMBIE_IMAGE = ":resources:images/animated_characters/zombie/zombie_idle.png"
+
+# 2. РОБОТ (Стрелок)
+ROBOT_HP = 40
+ROBOT_SPEED = 1.0
+ROBOT_DAMAGE = 15
+ROBOT_IMAGE = ":resources:images/animated_characters/robot/robot_idle.png"
+ROBOT_ATTACK_RANGE = 300
+ROBOT_COOLDOWN = 2.0
+
+# 3. СЛИЗЕНЬ (Танк: Медленный, Жирный, Сильный)
+SLIME_HP = 80
+SLIME_SPEED = 0.8
+SLIME_DAMAGE = 20
+SLIME_IMAGE = ":resources:images/enemies/slimeBlock.png"
+
+# 4. ЛЕТУЧАЯ МЫШЬ (Быстрая, Слабая, Увёртливая)
+BAT_HP = 15
+BAT_SPEED = 4.0
+BAT_DAMAGE = 5
+BAT_IMAGE = ":resources:images/enemies/fly.png"
