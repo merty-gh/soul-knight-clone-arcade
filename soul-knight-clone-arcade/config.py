@@ -34,10 +34,7 @@ UI_BG_COLOR = arcade.color.DARK_GRAY
 # --- Пути ---
 ASSET_PATH = "assets/"
 
-# --- СПИСОК СКИНОВ (НОВОЕ) ---
-# name: Имя для БД и отображения
-# price: Цена в кристаллах (0 = бесплатно)
-# image: Путь к спрайту
+# --- СПИСОК СКИНОВ ---
 SKINS_CONFIG = [
     {
         "name": "Adventurer",
@@ -58,5 +55,21 @@ SKINS_CONFIG = [
         "name": "Zombie",
         "price": 200,
         "image": ":resources:images/animated_characters/zombie/zombie_idle.png"
+    }
+]
+
+# --- СПИСОК ОРУЖИЯ ---
+WEAPONS_CONFIG = [
+    {
+        "name": "Pistol",
+        "price": 0,
+        "class_name": "Pistol",
+        "image": ":resources:images/space_shooter/laserBlue01.png"
+    },
+    {
+        "name": "Blaster",
+        "price": 50,
+        "class_name": "Blaster",
+        "image": ":resources:images/space_shooter/laserRed01.png"
     }
 ]

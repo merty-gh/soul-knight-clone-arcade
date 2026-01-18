@@ -7,3 +7,4 @@ class GameState(Enum):
     PAUSED = 3
     GAME_OVER = 4
     SKIN_SELECT = 5
+    WEAPON_SELECT = 6

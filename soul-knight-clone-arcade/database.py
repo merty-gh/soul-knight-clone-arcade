@@ -5,11 +5,10 @@ DB_NAME = "gamedata.db"
 
 
 def init_db():
-    """Создает таблицы, если их нет"""
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
 
-    # Таблица игрока (кристаллы)
+    # Таблица игрока
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS player (
             id INTEGER PRIMARY KEY,
@@ -17,24 +16,32 @@ def init_db():
         )
     ''')
 
-    # Таблица купленных скинов
+    # Таблица скинов
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS unlocked_skins (
             skin_name TEXT PRIMARY KEY
         )
     ''')
 
-    # Инициализация дефолтных данных
+    # --- НОВОЕ: Таблица оружия ---
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS unlocked_weapons (
+            weapon_name TEXT PRIMARY KEY
+        )
+    ''')
+
     cursor.execute('SELECT count(*) FROM player')
     if cursor.fetchone()[0] == 0:
         cursor.execute('INSERT INTO player (id, crystals) VALUES (1, 0)')
-        # Первый скин (Adventurer) доступен сразу
         cursor.execute('INSERT INTO unlocked_skins (skin_name) VALUES (?)', ("Adventurer",))
+        # Пистолет доступен сразу
+        cursor.execute('INSERT INTO unlocked_weapons (weapon_name) VALUES (?)', ("Pistol",))
 
     conn.commit()
     conn.close()
 
 
+# ... (Функции get_crystals, add_crystals, spend_crystals - ОСТАВИТЬ КАК БЫЛО) ...
 def get_crystals():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()
@@ -76,9 +83,29 @@ def unlock_skin(skin_name):
         cursor.execute('INSERT INTO unlocked_skins (skin_name) VALUES (?)', (skin_name,))
         conn.commit()
     except sqlite3.IntegrityError:
-        pass  # Уже куплен
+        pass
     conn.close()
 
 
-# Инициализируем БД при импорте
+# --- НОВЫЕ ФУНКЦИИ ДЛЯ ОРУЖИЯ ---
+def get_unlocked_weapons():
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute('SELECT weapon_name FROM unlocked_weapons')
+    rows = cursor.fetchall()
+    conn.close()
+    return [row[0] for row in rows]
+
+
+def unlock_weapon(weapon_name):
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    try:
+        cursor.execute('INSERT INTO unlocked_weapons (weapon_name) VALUES (?)', (weapon_name,))
+        conn.commit()
+    except sqlite3.IntegrityError:
+        pass
+    conn.close()
+
+
 init_db()

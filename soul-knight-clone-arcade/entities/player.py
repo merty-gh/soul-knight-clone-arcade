@@ -4,7 +4,12 @@ import database
 from entities.entity import Entity
 from weapons.pistol import Pistol
 
-
+class Blaster(Pistol):
+    def __init__(self):
+        super().__init__()
+        self.damage = 25 # Сильнее
+        self.cooldown = 0.3 # Медленнее
+        self.bullet_color = arcade.color.RED
 class Player(Entity):
     def __init__(self, x, y):
         # Загружаем скин по умолчанию (первый в списке)
@@ -34,3 +39,10 @@ class Player(Entity):
                 self.texture = arcade.load_texture(skin_data["image"])
                 self.current_skin_name = skin_name
                 break
+
+    def equip_weapon_by_name(self, class_name):
+        """Меняет оружие по названию класса"""
+        if class_name == "Pistol":
+            self.weapon = Pistol()
+        elif class_name == "Blaster":
+            self.weapon = Blaster()

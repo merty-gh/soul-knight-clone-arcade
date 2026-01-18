@@ -2,16 +2,16 @@ import arcade
 import config
 import database
 from entities.player import Player
+from entities.items import CrystalDrop
 from world.level_generator import LevelGenerator
 from world.lobby import Lobby
 from ui.hud import HUD
 from ui.menus import MenuRenderer
 from ui.skin_menu import SkinMenu
+from ui.weapon_menu import WeaponMenu
 from engine.game_state import GameState
 from utils.particle_system import ParticleSystem
 
-
-# КЛАСС ExtendedGameState УДАЛЕН. Используем GameState напрямую.
 
 class GameWindow(arcade.Window):
     def __init__(self):
@@ -20,28 +20,52 @@ class GameWindow(arcade.Window):
 
         self.current_state = GameState.MENU
         self.menu_renderer = MenuRenderer()
+
         self.hud = None
         self.player_list = None
         self.player = None
 
         self.level_generator = None
         self.lobby = None
+
         self.skin_menu = None
+        self.weapon_menu = None
 
         self.physics_engine = None
         self.bullet_list = None
         self.particle_system = None
         self.camera = None
 
-        self.interact_text = arcade.Text("", config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 2 + 50,
-                                         arcade.color.WHITE, 14, anchor_x="center")
+        # --- ИСПРАВЛЕНИЕ: используем x и y вместо start_x и start_y ---
+        self.interact_text = arcade.Text(
+            text="",
+            x=config.SCREEN_WIDTH // 2,
+            y=config.SCREEN_HEIGHT // 2 + 50,
+            color=arcade.color.WHITE,
+            font_size=14,
+            anchor_x="center"
+        )
+
+        self.lobby_crystal_text = arcade.Text(
+            text="",
+            x=20,
+            y=config.SCREEN_HEIGHT - 40,
+            color=arcade.color.CYAN,
+            font_size=20
+        )
+        # -------------------------------------------------------------
+
+        self.current_room_coords = None
+
         self.setup_system()
 
     def setup_system(self):
         self.player_list = arcade.SpriteList()
         self.camera = arcade.Camera2D()
+
         self.player = Player(config.SCREEN_WIDTH // 2, config.SCREEN_HEIGHT // 2)
         self.player_list.append(self.player)
+
         self.particle_system = ParticleSystem()
         self.hud = HUD()
 
@@ -49,6 +73,7 @@ class GameWindow(arcade.Window):
         self.current_state = GameState.LOBBY
         self.lobby = Lobby()
         self.lobby.setup()
+
         self.player.center_x = config.SCREEN_WIDTH // 2
         self.player.center_y = 250
 
@@ -60,10 +85,12 @@ class GameWindow(arcade.Window):
         self.bullet_list = arcade.SpriteList()
 
     def open_skin_menu(self):
-        """Открывает меню гардероба"""
-        # ИСПОЛЬЗУЕМ GameState.SKIN_SELECT
         self.current_state = GameState.SKIN_SELECT
         self.skin_menu = SkinMenu(self.player)
+
+    def open_weapon_menu(self):
+        self.current_state = GameState.WEAPON_SELECT
+        self.weapon_menu = WeaponMenu(self.player)
 
     def start_dungeon_run(self):
         self.current_state = GameState.PLAYING
@@ -84,6 +111,7 @@ class GameWindow(arcade.Window):
 
     def on_draw(self):
         self.clear()
+
         if self.camera:
             self.camera.use()
 
@@ -94,6 +122,7 @@ class GameWindow(arcade.Window):
             self.lobby.interactable_list.draw()
             self.player_list.draw()
             self.interact_text.draw()
+
         elif self.current_state in [GameState.PLAYING, GameState.PAUSED, GameState.GAME_OVER]:
             self.draw_game()
 
@@ -101,19 +130,26 @@ class GameWindow(arcade.Window):
 
         if self.current_state == GameState.PLAYING:
             self.hud.draw(self.player)
+
         elif self.current_state == GameState.LOBBY:
-            arcade.draw_text(f"Crystals: {self.player.crystals}", 20, config.SCREEN_HEIGHT - 40, arcade.color.CYAN, 20)
+            self.lobby_crystal_text.text = f"Crystals: {self.player.crystals}"
+            self.lobby_crystal_text.draw()
+
         elif self.current_state == GameState.MENU:
             self.menu_renderer.draw_main_menu()
+
         elif self.current_state == GameState.PAUSED:
             self.hud.draw(self.player)
             self.menu_renderer.draw_pause_menu()
+
         elif self.current_state == GameState.GAME_OVER:
             self.menu_renderer.draw_game_over(self.player.score)
 
-        # ОТРИСОВКА МЕНЮ СКИНОВ
         elif self.current_state == GameState.SKIN_SELECT:
             self.skin_menu.draw()
+
+        elif self.current_state == GameState.WEAPON_SELECT:
+            self.weapon_menu.draw()
 
     def draw_game(self):
         self.level_generator.floor_list.draw()
@@ -158,6 +194,7 @@ class GameWindow(arcade.Window):
         self.particle_system.update()
         self.level_generator.item_list.update(delta_time)
         self.level_generator.door_list.update(delta_time)
+
         self.scroll_to_player()
         self.update_room_logic()
 
@@ -168,15 +205,17 @@ class GameWindow(arcade.Window):
                 self.particle_system.add_hit_effect(bullet.center_x, bullet.center_y, arcade.color.GRAY)
                 bullet.kill()
                 continue
+
             hit_enemies = arcade.check_for_collision_with_list(bullet, self.level_generator.enemy_list)
             if len(hit_enemies) > 0:
                 bullet.kill()
                 for enemy in hit_enemies:
                     self.particle_system.add_hit_effect(enemy.center_x, enemy.center_y, arcade.color.RED)
                     enemy.take_damage(bullet.damage)
+
                     if enemy.hp <= 0:
-                        database.add_crystals(5)
-                        self.player.update_crystals_from_db()
+                        crystal = CrystalDrop(enemy.center_x, enemy.center_y, amount=5)
+                        self.level_generator.item_list.append(crystal)
                         self.player.score += 10
                         self.particle_system.add_hit_effect(enemy.center_x, enemy.center_y, arcade.color.DARK_RED)
 
@@ -189,7 +228,11 @@ class GameWindow(arcade.Window):
 
         hit_items = arcade.check_for_collision_with_list(self.player, self.level_generator.item_list)
         for item in hit_items:
-            if item.on_pickup(self.player):
+            if isinstance(item, CrystalDrop):
+                database.add_crystals(item.amount)
+                self.player.update_crystals_from_db()
+                item.kill()
+            elif item.on_pickup(self.player):
                 item.kill()
 
     def update_room_logic(self):
@@ -198,6 +241,7 @@ class GameWindow(arcade.Window):
         gx = int(px // config.ROOM_WIDTH_PX)
         gy = int(py // config.ROOM_HEIGHT_PX)
         potential_room = (gx, gy)
+
         buffer = 100
         local_x = px % config.ROOM_WIDTH_PX
         local_y = py % config.ROOM_HEIGHT_PX
@@ -208,6 +252,7 @@ class GameWindow(arcade.Window):
             if potential_room != self.current_room_coords:
                 self.current_room_coords = potential_room
                 self.on_enter_room(potential_room)
+
         if self.current_room_coords:
             self.check_room_cleared(self.current_room_coords)
 
@@ -219,6 +264,7 @@ class GameWindow(arcade.Window):
         for e in enemies:
             if e in self.level_generator.enemy_list:
                 alive_count += 1
+
         if alive_count > 0:
             for door in room_data['doors']:
                 door.center_x = door.initial_x
@@ -232,6 +278,7 @@ class GameWindow(arcade.Window):
         for e in enemies:
             if e in self.level_generator.enemy_list:
                 alive_count += 1
+
         if alive_count == 0:
             for door in room_data['doors']:
                 door.center_x = -10000
@@ -255,7 +302,7 @@ class GameWindow(arcade.Window):
 
     def on_key_press(self, key, modifiers):
         if key == arcade.key.ESCAPE:
-            if self.current_state == GameState.SKIN_SELECT:
+            if self.current_state in [GameState.SKIN_SELECT, GameState.WEAPON_SELECT]:
                 self.enter_lobby()
             else:
                 arcade.close_window()
@@ -278,16 +325,21 @@ class GameWindow(arcade.Window):
                 hit_list = arcade.check_for_collision_with_list(self.player, self.lobby.interactable_list)
                 if hit_list:
                     item = hit_list[0]
-                    if "Skin" in str(type(item)):
+                    item_type = str(type(item))
+                    if "Skin" in item_type:
                         self.open_skin_menu()
+                    elif "Weapon" in item_type:
+                        self.open_weapon_menu()
                     else:
                         item.on_interact(self.player, self)
 
-        # УПРАВЛЕНИЕ В ГАРДЕРОБЕ
         elif self.current_state == GameState.SKIN_SELECT:
             result = self.skin_menu.on_key_press(key)
-            if result == "EXIT":
-                self.enter_lobby()
+            if result == "EXIT": self.enter_lobby()
+
+        elif self.current_state == GameState.WEAPON_SELECT:
+            result = self.weapon_menu.on_key_press(key)
+            if result == "EXIT": self.enter_lobby()
 
         elif self.current_state == GameState.PLAYING:
             if key == arcade.key.P: self.current_state = GameState.PAUSED
@@ -302,6 +354,7 @@ class GameWindow(arcade.Window):
 
         elif self.current_state == GameState.PAUSED:
             if key == arcade.key.P: self.current_state = GameState.PLAYING
+
         elif self.current_state == GameState.GAME_OVER:
             if key == arcade.key.R:
                 self.player.hp = self.player.max_hp
