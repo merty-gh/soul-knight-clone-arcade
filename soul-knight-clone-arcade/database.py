@@ -34,8 +34,10 @@ def init_db():
     if cursor.fetchone()[0] == 0:
         cursor.execute('INSERT INTO player (id, crystals) VALUES (1, 0)')
         cursor.execute('INSERT INTO unlocked_skins (skin_name) VALUES (?)', ("Adventurer",))
-        # Пистолет доступен сразу
-        cursor.execute('INSERT INTO unlocked_weapons (weapon_name) VALUES (?)', ("Pistol",))
+
+        # ИЗМЕНЕНИЕ: Даем игроку меч по умолчанию
+        cursor.execute('INSERT INTO unlocked_weapons (weapon_name) VALUES (?)', ("Sword",))
+
 
     conn.commit()
     conn.close()

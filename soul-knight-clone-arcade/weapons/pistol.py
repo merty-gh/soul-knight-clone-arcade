@@ -1,5 +1,5 @@
 import time
-from weapons.weapon import Weapon
+from weapons.weapons import Weapon
 from entities.projectiles import Projectile
 
 class Pistol(Weapon):
