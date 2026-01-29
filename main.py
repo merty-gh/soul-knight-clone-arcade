@@ -36,6 +36,11 @@ class GameWindow(arcade.Window):
         self.bullet_list = None
         self.enemy_bullet_list = None
         self.particle_system = ParticleSystem()
+        # Звуки
+        self.shoot_sound = arcade.load_sound(":resources:sounds/laser1.wav")
+        self.enemy_death_sound = arcade.load_sound(":resources:sounds/explosion2.wav")
+        self.player_death_sound = arcade.load_sound(":resources:sounds/gameover2.wav")
+        self.victory_sound = arcade.load_sound(":resources:sounds/upgrade4.wav")
         self.camera = None
 
         self.dungeon_level = 1
@@ -46,8 +51,10 @@ class GameWindow(arcade.Window):
         self.lobby_crystal_text = arcade.Text(text="", x=20, y=config.SCREEN_HEIGHT - 40, color=arcade.color.CYAN,
                                               font_size=20)
         self.press_e_text = arcade.Text("Press [E]", 0, 0, arcade.color.WHITE, 12, anchor_x="center")
-        self.shield_text = arcade.Text("", 20, config.SCREEN_HEIGHT - 80, arcade.color.SILVER, 16)
-        self.level_text = arcade.Text("", config.SCREEN_WIDTH - 100, config.SCREEN_HEIGHT - 40, arcade.color.GOLD, 16)
+        # Текст щита и уровня
+        self.shield_text = arcade.Text("", 20, config.SCREEN_HEIGHT - 80, arcade.color.CYAN, 16)
+        # Размещаем уровень чуть ниже счета, чтобы надписи не накладывались
+        self.level_text = arcade.Text("", config.SCREEN_WIDTH - 100, config.SCREEN_HEIGHT - 70, arcade.color.GOLD, 16)
 
         self.setup_system()
 
@@ -64,6 +71,8 @@ class GameWindow(arcade.Window):
         self.skin_menu = SkinMenu(self.player)
 
     def open_weapon_menu(self):
+        # Обновляем кристаллы из БД перед открытием меню
+        self.player.update_crystals_from_db()
         self.current_state = GameState.WEAPON_SELECT
         self.weapon_menu = WeaponMenu(self.player)
 
@@ -264,6 +273,8 @@ class GameWindow(arcade.Window):
             self.menu_renderer.draw_pause_menu()
         elif self.current_state == GameState.GAME_OVER:
             self.menu_renderer.draw_game_over(self.player.score)
+        elif self.current_state == GameState.VICTORY:
+            self.menu_renderer.draw_victory(self.player.score)
         elif self.current_state == GameState.SKIN_SELECT:
             self.skin_menu.draw()
         elif self.current_state == GameState.WEAPON_SELECT:
@@ -315,13 +326,8 @@ class GameWindow(arcade.Window):
                 hit_list = arcade.check_for_collision_with_list(self.player, self.lobby.interactable_list)
                 if hit_list:
                     item = hit_list[0]
-                    item_type = str(type(item))
-                    if "Skin" in item_type:
-                        self.open_skin_menu()
-                    elif "Weapon" in item_type:
-                        self.open_weapon_menu()
-                    else:
-                        item.on_interact(self.player, self)
+                    # У каждого интерактивного объекта своя логика взаимодействия
+                    item.on_interact(self.player, self)
 
         elif self.current_state == GameState.SKIN_SELECT:
             if self.skin_menu.on_key_press(key) == "EXIT": self.enter_lobby()
@@ -359,7 +365,7 @@ class GameWindow(arcade.Window):
                             self.level_generator.wall_list.remove(closest_chest)
                         self.update_physics_engine()
 
-        elif self.current_state == GameState.GAME_OVER:
+        elif self.current_state in [GameState.GAME_OVER, GameState.VICTORY]:
             if key == arcade.key.R:
                 self.player.hp = self.player.max_hp
                 self.enter_lobby()
@@ -384,6 +390,7 @@ class GameWindow(arcade.Window):
                     bullet = weapon.attack(self.player.center_x, self.player.center_y, world_x, world_y)
                     if bullet:
                         self.bullet_list.append(bullet)
+                        arcade.play_sound(self.shoot_sound)
                 elif isinstance(weapon, MeleeWeapon):
                     hit_enemies = weapon.attack(self.player, self.level_generator.enemy_list)
                     if hit_enemies:
@@ -392,7 +399,12 @@ class GameWindow(arcade.Window):
                         for enemy in hit_enemies:
                             self.particle_system.add_hit_effect(enemy.center_x, enemy.center_y, arcade.color.RED)
                             enemy.take_damage(weapon.damage)
-                            if enemy.hp <= 0:
+                            if enemy.hp <= 0 and not (hasattr(enemy, 'is_dying') and enemy.is_dying):
+                                arcade.play_sound(self.enemy_death_sound)
+                                if isinstance(enemy, Boss):
+                                    self.current_state = GameState.VICTORY
+                                    arcade.play_sound(self.victory_sound)
+                                # Создаем кристалл и добавляем очки (анимация смерти запущена в take_damage)
                                 crystal = CrystalDrop(enemy.center_x, enemy.center_y, amount=5)
                                 self.level_generator.item_list.append(crystal)
                                 self.player.score += 10
@@ -432,7 +444,14 @@ class GameWindow(arcade.Window):
         all_obstacles.extend(self.level_generator.door_list)
 
         # Обновляем врагов (теперь с проверкой пуль босса)
+        enemies_to_remove = []
         for enemy in self.level_generator.enemy_list:
+            # Проверяем анимацию смерти
+            if hasattr(enemy, 'is_dying') and enemy.is_dying:
+                if enemy.update_death_animation(delta_time):
+                    enemies_to_remove.append(enemy)
+                continue
+            
             result = enemy.update_with_physics(delta_time, all_obstacles)
             if result:
                 # Если враг вернул список пуль (Босс)
@@ -441,6 +460,11 @@ class GameWindow(arcade.Window):
                 # Если враг вернул одну пулю (Робот)
                 else:
                     self.enemy_bullet_list.append(result)
+        
+        # Удаляем мертвых врагов после анимации
+        for enemy in enemies_to_remove:
+            if enemy in self.level_generator.enemy_list:
+                self.level_generator.enemy_list.remove(enemy)
 
         self.particle_system.update()
         self.level_generator.item_list.update(delta_time)
@@ -481,7 +505,14 @@ class GameWindow(arcade.Window):
                 for enemy in hit_enemies:
                     self.particle_system.add_hit_effect(enemy.center_x, enemy.center_y, arcade.color.RED)
                     enemy.take_damage(bullet.damage)
-                    if enemy.hp <= 0:
+                    if enemy.hp <= 0 and not (hasattr(enemy, 'is_dying') and enemy.is_dying):
+                        # Звук смерти врага
+                        arcade.play_sound(self.enemy_death_sound)
+                        # Проверка на босса -> победа
+                        if isinstance(enemy, Boss):
+                            self.current_state = GameState.VICTORY
+                            arcade.play_sound(self.victory_sound)
+                        # Создаем кристалл и добавляем очки (анимация смерти запущена в take_damage)
                         crystal = CrystalDrop(enemy.center_x, enemy.center_y, amount=5)
                         self.level_generator.item_list.append(crystal)
                         self.player.score += 10
@@ -495,12 +526,14 @@ class GameWindow(arcade.Window):
                 self.player.take_damage(config.ROBOT_DAMAGE)
                 self.particle_system.add_hit_effect(self.player.center_x, self.player.center_y, arcade.color.RED)
                 if self.player.hp <= 0:
+                    arcade.play_sound(self.player_death_sound)
                     self.current_state = GameState.GAME_OVER
 
         for enemy in self.level_generator.enemy_list:
             if arcade.check_for_collision(self.player, enemy):
                 self.player.take_damage(enemy.damage * 0.05)
                 if self.player.hp <= 0:
+                    arcade.play_sound(self.player_death_sound)
                     self.current_state = GameState.GAME_OVER
 
         hit_items = arcade.check_for_collision_with_list(self.player, self.level_generator.item_list)

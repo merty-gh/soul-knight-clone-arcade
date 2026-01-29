@@ -6,12 +6,21 @@ SCREEN_HEIGHT = 768
 SCREEN_TITLE = "Soul Knight Clone (Arcade)"
 
 # --- Настройки игры ---
+# Общий масштаб спрайтов (стены, враги, предметы)
 SPRITE_SCALING = 0.5
 TILE_SCALING = 0.5
 PLAYER_SPEED = 3.5
 PLAYER_MAX_HP = 100
 PLAYER_MAX_ARMOR = 50
 BULLET_SPEED = 12
+
+# --- Масштабы персонажа и оружия ---
+# Масштаб ТОЛЬКО для игрока (персонажа)
+PLAYER_SCALE = 0.07
+# Базовый масштаб меча в руках
+SWORD_IN_HAND_SCALE = 0.03
+# Базовый масштаб бластера в руках (можно настраивать отдельно)
+BLASTER_IN_HAND_SCALE = 0.07
 
 # --- Настройки уровня ---
 ROOM_WIDTH_PX = 1024
@@ -52,18 +61,38 @@ UI_HEALTH_COLOR = arcade.color.RED
 UI_BG_COLOR = arcade.color.DARK_GRAY
 
 # --- Пути ---
-ASSET_PATH = "assets/"
+# Папка с пользовательскими изображениями
+ASSET_PATH = "images/"
 
 # --- ПРЕДМЕТЫ ---
 CHEST_PROBABILITY = 1.0
 SHIELD_AMOUNT = 25
 
 # --- СПИСОК СКИНОВ ---
+# image  – большая картинка для персонажа в игре
+# icon   – маленькая иконка для меню (чтобы не раздувать фон, как на скрине)
 SKINS_CONFIG = [
-    {"name": "Adventurer", "price": 0, "image": ":resources:images/animated_characters/female_adventurer/femaleAdventurer_idle.png"},
-    {"name": "Knight", "price": 50, "image": ":resources:images/animated_characters/male_person/malePerson_idle.png"},
-    {"name": "Robot", "price": 100, "image": ":resources:images/animated_characters/robot/robot_idle.png"},
-    {"name": "Zombie", "price": 200, "image": ":resources:images/animated_characters/zombie/zombie_idle.png"}
+    {
+        "name": "Adventurer",
+        "price": 0,
+        "image": "images/pers.png",
+        "icon": ":resources:images/animated_characters/female_adventurer/femaleAdventurer_idle.png"
+    },
+    {
+        "name": "Knight",
+        "price": 50,
+        "image": ":resources:images/animated_characters/male_person/malePerson_idle.png"
+    },
+    {
+        "name": "Robot",
+        "price": 100,
+        "image": ":resources:images/animated_characters/robot/robot_idle.png"
+    },
+    {
+        "name": "Zombie",
+        "price": 200,
+        "image": ":resources:images/animated_characters/zombie/zombie_idle.png"
+    }
 ]
 
 # --- ОРУЖИЕ ---
@@ -72,25 +101,16 @@ WEAPONS_CONFIG = [
         "name": "Sword",
         "price": 0,
         "class_name": "Sword",
-        "image": "mech.png", # ВАША КАРТИНКА
+        "image": "images/mech.png",  # ВАША КАРТИНКА
         "damage": 15,
         "cooldown": 0.4,
         "type": "melee"
     },
     {
-        "name": "Pistol",
-        "price": 100,
-        "class_name": "Pistol",
-        "image": ":resources:images/space_shooter/laserBlue01.png",
-        "damage": 10,
-        "cooldown": 0.5,
-        "type": "ranged"
-    },
-    {
         "name": "Blaster",
         "price": 200,
         "class_name": "Blaster",
-        "image": "blaster.png", # ВАША КАРТИНКА
+        "image": "images/blaster.png",  # ВАША КАРТИНКА
         "damage": 5,
         "cooldown": 0.1,
         "type": "ranged"

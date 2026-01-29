@@ -35,7 +35,7 @@ def init_db():
         cursor.execute('INSERT INTO player (id, crystals) VALUES (1, 0)')
         cursor.execute('INSERT INTO unlocked_skins (skin_name) VALUES (?)', ("Adventurer",))
 
-        # ИЗМЕНЕНИЕ: Даем игроку меч по умолчанию
+        # ИЗМЕНЕНИЕ: Даем игроку меч по умолчанию (используем class_name)
         cursor.execute('INSERT INTO unlocked_weapons (weapon_name) VALUES (?)', ("Sword",))
 
 
